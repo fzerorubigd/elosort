@@ -4,12 +4,13 @@ import (
 	"errors"
 	"math"
 
-	"elbix.dev/elosort/pkg/ranking"
+	"github.com/fzerorubigd/elosort/pkg/ranking"
 )
 
 const (
 	defaultK         = 32
 	defaultDeviation = 400
+	defaultRank      = 1000
 )
 
 type eloRanker struct {
@@ -22,6 +23,14 @@ type eloRanker struct {
 func (e *eloRanker) Calculate(rankA, rankB int, scoreA, scoreB float64) (int, int, error) {
 	if scoreA+scoreB != 1 {
 		return 0, 0, errors.New("sum of scores should be one")
+	}
+
+	if rankA == 0 {
+		rankA = defaultRank
+	}
+
+	if rankB == 0 {
+		rankB = defaultRank
 	}
 
 	qA := math.Pow(10, float64(rankA)/e.deviation)
