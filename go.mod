@@ -13,6 +13,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/ogier/pflag v0.0.1
 	github.com/pkg/errors v0.9.1
+	github.com/rubenv/sql-migrate v0.0.0-20200616145509-8d140a17f351
 	github.com/stretchr/testify v1.6.1
 	github.com/technoweenie/multipartstreamer v1.0.1 // indirect
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect

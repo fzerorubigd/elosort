@@ -3,6 +3,8 @@ package sqlite
 import (
 	"context"
 
+	migrate "github.com/rubenv/sql-migrate"
+
 	"github.com/fzerorubigd/elosort/pkg/db"
 
 	"github.com/jmoiron/sqlx"
@@ -102,34 +104,8 @@ func (s *storage) Remove(ctx context.Context, id int64) error {
 }
 
 func (s *storage) initialize(ctx context.Context) error {
-	table := `create table if not exists items
-(
-    id          integer 
-        constraint items_pk 
-            primary key autoincrement,
-    user_id     integer,
-    name        varchar [80],
-    description varchar [250] default '',
-    url         varchar [200] default '',
-    image       varchar [200] default '',
-    rank        integer       default 0,
-    compared    integer       default 0
-)`
-
-	index := `create unique index if not exists items_user_id_name_uindex
-    on items (user_id, name)`
-
-	_, err := s.db.ExecContext(ctx, table)
-	if err != nil {
-		return errors.Wrap(err, "create table failed")
-	}
-
-	_, err = s.db.ExecContext(ctx, index)
-	if err != nil {
-		return errors.Wrap(err, "create index failed")
-	}
-
-	return nil
+	_, err := migrate.Exec(s.db.DB, "sqlite3", migrations, migrate.Up)
+	return errors.Wrap(err, "migration failed")
 }
 
 func NewSQLiteStorage(ctx context.Context, dbPath string) (db.Storage, error) {
