@@ -21,8 +21,8 @@ func (s *storage) Close() error {
 }
 
 func (s *storage) Create(ctx context.Context, item *db.Item) (*db.Item, error) {
-	q := `INSERT INTO items (user_id, name, description, url, image, rank) 
-VALUES (:user_id, :name, :description, :url, :image, :rank)`
+	q := `INSERT INTO items (user_id, name, category, description, url, image, rank) 
+VALUES (:user_id, :name, :category ,:description, :url, :image, :rank)`
 	res, err := s.db.NamedExecContext(ctx, q, item)
 	if err != nil {
 		return nil, errors.Wrap(err, "insert failed")
@@ -46,14 +46,14 @@ func (s *storage) GetByID(ctx context.Context, id int64) (*db.Item, error) {
 	return &item, nil
 }
 
-func (s *storage) GetByName(ctx context.Context, userID int64, name string) (*db.Item, error) {
+func (s *storage) GetByName(ctx context.Context, userID, category int64, name string) (*db.Item, error) {
 	var item db.Item
 
 	if err := s.db.GetContext(
 		ctx,
 		&item,
-		"SELECT * FROM items WHERE user_id = $1 AND name = $2",
-		userID, name); err != nil {
+		"SELECT * FROM items WHERE user_id = $1 AND name = $2 AND category = $3",
+		userID, name, category); err != nil {
 		return nil, errors.Wrap(err, "select failed")
 	}
 
@@ -70,7 +70,7 @@ func (s *storage) SetRank(ctx context.Context, id int64, rank int) error {
 	return nil
 }
 
-func (s *storage) Items(ctx context.Context, userID int64, page, count int) ([]*db.Item, error) {
+func (s *storage) Items(ctx context.Context, userID, category int64, page, count int) ([]*db.Item, error) {
 	if page <= 0 {
 		page = 1
 	}
@@ -78,20 +78,20 @@ func (s *storage) Items(ctx context.Context, userID int64, page, count int) ([]*
 		count = 10
 	}
 	start := (page - 1) * count
-	q := "SELECT * FROM items WHERE user_id = $1 ORDER BY rank DESC LIMIT $2, $3"
+	q := "SELECT * FROM items WHERE user_id = $1 AND category = $2 ORDER BY rank DESC LIMIT $3, $4"
 	var list []*db.Item
-	if err := s.db.SelectContext(ctx, &list, q, userID, start, start+count); err != nil {
+	if err := s.db.SelectContext(ctx, &list, q, userID, category, start, start+count); err != nil {
 		return nil, errors.Wrap(err, "list failed")
 	}
 
 	return list, nil
 }
 
-func (s *storage) Random(ctx context.Context, userID int64, count int) ([]*db.Item, error) {
-	q := "SELECT * FROM items WHERE user_id = $1 ORDER BY compared, RANDOM() LIMIT $2"
+func (s *storage) Random(ctx context.Context, userID, category int64, count int) ([]*db.Item, error) {
+	q := "SELECT * FROM items WHERE user_id = $1 AND category = $2 ORDER BY compared, RANDOM() LIMIT $3"
 	var items []*db.Item
 
-	if err := s.db.SelectContext(ctx, &items, q, userID, count); err != nil {
+	if err := s.db.SelectContext(ctx, &items, q, userID, category, count); err != nil {
 		return nil, errors.Wrap(err, "select failed")
 	}
 

@@ -17,13 +17,30 @@ import (
 
 type stateFunc func(ctx context.Context, message string) (telegram.Response, stateFunc)
 
+const (
+	chooseOne     = "Choose one"
+	importList    = "Import board game list"
+	randomCompare = "Random compare"
+	top20         = "Top 20"
+	settings      = "Settings"
+	cancel        = "Cancel"
+	fastCompare   = "Set fast compare"
+	another       = "Another"
+)
+
 type singleUser struct {
 	userID  int64
 	ranker  ranking.Ranker
 	storage db.Storage
 
-	left     *db.Item
-	right    *db.Item
+	left  *db.Item
+	right *db.Item
+
+	category *db.Category
+
+	config struct {
+		fastCompare bool
+	}
 
 	state stateFunc
 }
@@ -32,14 +49,15 @@ func (su *singleUser) resetText(_ context.Context, text string) telegram.Respons
 	su.left, su.right = nil, nil
 	su.state = su.startState
 	return telegram.NewButtonResponse(text,
-		"Import board game list",
-		"Random compare",
-		"Top 20",
+		importList,
+		randomCompare,
+		top20,
+		settings,
 	)
 }
 
 func (su *singleUser) Reset(ctx context.Context) telegram.Response {
-	return su.resetText(ctx, "Choose one")
+	return su.resetText(ctx, chooseOne)
 }
 
 func (su *singleUser) Process(ctx context.Context, message string) telegram.Response {
@@ -49,18 +67,20 @@ func (su *singleUser) Process(ctx context.Context, message string) telegram.Resp
 
 	resp, state := su.state(ctx, message)
 	su.state = state
+	su.category = nil
+
 	return resp
 }
 
 func (su *singleUser) errState(ctx context.Context, err error) (telegram.Response, stateFunc) {
-	return su.resetText(ctx, err.Error()), su.startState
+	return su.resetText(ctx, fmt.Sprintf("Error: %q", err.Error())), su.startState
 }
 
 func (su *singleUser) startState(ctx context.Context, message string) (telegram.Response, stateFunc) {
 	switch message {
-	case "Import board game list":
+	case importList:
 		return telegram.NewTextResponse("Your user name:", true), su.importState
-	case "Top 20":
+	case top20:
 		items, err := su.page(context.Background(), 1, 20)
 		if err != nil {
 			return su.errState(ctx, err)
@@ -72,7 +92,7 @@ func (su *singleUser) startState(ctx context.Context, message string) (telegram.
 		}
 
 		return su.resetText(ctx, text), su.startState
-	case "Random compare":
+	case randomCompare:
 		if err := su.getComparableItems(context.Background()); err != nil {
 			return su.errState(ctx, err)
 		}
@@ -92,12 +112,34 @@ func (su *singleUser) startState(ctx context.Context, message string) (telegram.
 			return su.errState(ctx, err)
 		}
 
-		buttons = append(buttons, "Cancel")
+		buttons = append(buttons, cancel)
 		items3 := telegram.NewButtonResponse("Choose one option or enter a number between 0-100:", buttons...)
 		return telegram.NewMultiResponse(item1, item2, items3), su.stateBattle
+	case settings:
+		return su.setConfig(ctx, "")
 	default:
 		return telegram.NewTextResponse("invalid input", false), su.startState
 	}
+}
+
+func (su *singleUser) setConfig(ctx context.Context, message string) (telegram.Response, stateFunc) {
+	if message == "" {
+		status := "ON"
+		if su.config.fastCompare {
+			status = "OFF"
+		}
+		return telegram.NewButtonResponse("Set config", fmt.Sprintf("%s %s", fastCompare, status)), su.setConfig
+	}
+	switch message {
+	case fmt.Sprintf("%s ON", fastCompare):
+		su.config.fastCompare = true
+	case fmt.Sprintf("%s OFF", fastCompare):
+		su.config.fastCompare = false
+	default:
+		return su.errState(ctx, errors.New("invalid configuration"))
+	}
+
+	return su.resetText(ctx, "Config set was successful"), su.startState
 }
 
 func (su *singleUser) fallbackToFloat(ctx context.Context, message string) (telegram.Response, stateFunc) {
@@ -114,8 +156,8 @@ func (su *singleUser) fallbackToFloat(ctx context.Context, message string) (tele
 
 func (su *singleUser) afterBattle(ctx context.Context, message string) (telegram.Response, stateFunc) {
 	switch message {
-	case "Another":
-		return su.startState(ctx, "Random compare")
+	case another:
+		return su.startState(ctx, randomCompare)
 	default:
 		return su.Reset(ctx), su.startState
 	}
@@ -127,12 +169,12 @@ func (su *singleUser) rankMessage(ctx context.Context, score float64) (telegram.
 		return su.errState(ctx, err)
 	}
 
-	return telegram.NewButtonResponse(text, "Another", "Cancel"), su.afterBattle
+	return telegram.NewButtonResponse(text, another, cancel), su.afterBattle
 
 }
 
 func (su *singleUser) stateBattle(ctx context.Context, message string) (telegram.Response, stateFunc) {
-	if message == "Cancel" {
+	if message == cancel {
 		return su.Reset(ctx), su.startState
 	}
 	texts, _, err := su.getButtonText()
@@ -146,6 +188,9 @@ func (su *singleUser) stateBattle(ctx context.Context, message string) (telegram
 		return su.fallbackToFloat(ctx, message)
 	}
 
+	if su.config.fastCompare {
+		return su.startState(ctx, randomCompare)
+	}
 	return su.rankMessage(ctx, score)
 }
 
@@ -178,7 +223,7 @@ func (su *singleUser) importState(ctx context.Context, message string) (telegram
 }
 
 func (su *singleUser) getComparableItems(ctx context.Context) error {
-	items, err := su.storage.Random(ctx, su.userID, 2)
+	items, err := su.storage.Random(ctx, su.userID, su.category.GetID(), 2)
 	if err != nil {
 		return errors.Wrap(err, "failed to get random items")
 	}
@@ -220,7 +265,7 @@ func (su *singleUser) setRank(ctx context.Context, leftScore float64) (string, e
 }
 
 func (su *singleUser) page(ctx context.Context, page, count int) ([]*db.Item, error) {
-	return su.storage.Items(ctx, su.userID, page, count)
+	return su.storage.Items(ctx, su.userID, su.category.GetID(), page, count)
 }
 
 func (su *singleUser) importList(ctx context.Context, username string) error {

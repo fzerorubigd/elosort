@@ -9,12 +9,29 @@ type Item struct {
 	ID          int64  `json:"id" validate:"required" db:"id"`
 	UserID      int64  `json:"user_id" validate:"required" db:"user_id"`
 	Name        string `json:"name" validate:"required,gte=3" db:"name"`
-	Category    string `json:"category" validate:"required,gte=3" db:"category"`
+	Category    int64  `json:"category" db:"category"`
 	Description string `json:"description,omitempty" db:"description"`
 	URL         string `json:"url,omitempty" db:"url"`
 	Image       string `json:"image,omitempty" db:"image"`
 	Rank        int    `json:"level" db:"rank"`
 	Compared    int    `json:"compared" db:"compared"`
+}
+
+// Category of items
+type Category struct {
+	ID          int64  `json:"id" validate:"required" db:"id"`
+	UserID      int64  `json:"user_id" validate:"required" db:"user_id"`
+	Name        string `json:"name" validate:"required,gte=3" db:"name"`
+	Description string `json:"description,omitempty" db:"description"`
+}
+
+// GetID returns the id of the category, 0 is default category
+func (c *Category) GetID() int64 {
+	if c == nil {
+		return 0
+	}
+
+	return c.ID
 }
 
 // Validate validate the structure
