@@ -18,15 +18,24 @@ import (
 type stateFunc func(ctx context.Context, message string) (telegram.Response, stateFunc)
 
 const (
-	chooseOne     = "Choose one"
-	importList    = "Import board game list"
-	randomCompare = "Random compare"
-	top20         = "Top 20"
-	settings      = "Settings"
-	cancel        = "Cancel"
-	fastCompare   = "Set fast compare"
-	another       = "Another"
+	chooseOne       = "Choose one"
+	importList      = "Import board game list"
+	randomCompare   = "Random compare"
+	top20           = "Top 20"
+	settings        = "Settings"
+	cancel          = "Cancel"
+	twoStepCompare  = "Two step compare"
+	another         = "Another"
+	defaultCategory = "Default Category"
+	selectCategory  = "Select Active Category"
 )
+
+var defaultLists = map[string]gobgg.CollectionType{
+	"Wishlist": gobgg.CollectionTypeWishList,
+	"Own":      gobgg.CollectionTypeOwn,
+	"Played":   gobgg.CollectionTypePlayed,
+	"Rated":    gobgg.CollectionTypeRated,
+}
 
 type singleUser struct {
 	userID  int64
@@ -39,7 +48,7 @@ type singleUser struct {
 	category *db.Category
 
 	config struct {
-		fastCompare bool
+		twoStepCompare bool
 	}
 
 	state stateFunc
@@ -52,11 +61,17 @@ func (su *singleUser) resetText(_ context.Context, text string) telegram.Respons
 		importList,
 		randomCompare,
 		top20,
+		selectCategory,
 		settings,
 	)
 }
 
 func (su *singleUser) Reset(ctx context.Context) telegram.Response {
+	var err error
+	su.category, err = su.storage.GetCategoryByName(ctx, su.userID, "Wishlist")
+	if err != nil {
+		log.Print(err)
+	}
 	return su.resetText(ctx, chooseOne)
 }
 
@@ -67,7 +82,6 @@ func (su *singleUser) Process(ctx context.Context, message string) telegram.Resp
 
 	resp, state := su.state(ctx, message)
 	su.state = state
-	su.category = nil
 
 	return resp
 }
@@ -115,6 +129,8 @@ func (su *singleUser) startState(ctx context.Context, message string) (telegram.
 		buttons = append(buttons, cancel)
 		items3 := telegram.NewButtonResponse("Choose one option or enter a number between 0-100:", buttons...)
 		return telegram.NewMultiResponse(item1, item2, items3), su.stateBattle
+	case selectCategory:
+		return su.setCategory(ctx, "")
 	case settings:
 		return su.setConfig(ctx, "")
 	default:
@@ -122,19 +138,53 @@ func (su *singleUser) startState(ctx context.Context, message string) (telegram.
 	}
 }
 
+func (su *singleUser) setCategory(ctx context.Context, message string) (telegram.Response, stateFunc) {
+	cats, err := su.storage.Categories(ctx, su.userID)
+	if err != nil {
+		return su.errState(ctx, err)
+	}
+
+	if len(cats) == 0 {
+		return su.resetText(ctx, "No category, import board games first"), su.startState
+	}
+
+	var (
+		data = make([]string, 0, len(cats))
+	)
+
+	if message == "" {
+		for i := range cats {
+			data = append(data, cats[i].Name)
+		}
+
+		return telegram.NewButtonResponse("Select the category", data...), su.setCategory
+	}
+
+	for i := range cats {
+		if message == cats[i].Name {
+			su.category = cats[i]
+			return su.resetText(ctx, fmt.Sprintf("Active category is %s", su.category.Name)), su.startState
+		}
+	}
+
+	return su.resetText(ctx, "Invalid category name"), su.startState
+}
+
 func (su *singleUser) setConfig(ctx context.Context, message string) (telegram.Response, stateFunc) {
 	if message == "" {
 		status := "ON"
-		if su.config.fastCompare {
+		if su.config.twoStepCompare {
 			status = "OFF"
 		}
-		return telegram.NewButtonResponse("Set config", fmt.Sprintf("%s %s", fastCompare, status)), su.setConfig
+		return telegram.NewButtonResponse("Set config", fmt.Sprintf("%s %s", twoStepCompare, status), cancel), su.setConfig
 	}
 	switch message {
-	case fmt.Sprintf("%s ON", fastCompare):
-		su.config.fastCompare = true
-	case fmt.Sprintf("%s OFF", fastCompare):
-		su.config.fastCompare = false
+	case cancel:
+		return su.resetText(ctx, "Nothing was changed"), su.startState
+	case fmt.Sprintf("%s ON", twoStepCompare):
+		su.config.twoStepCompare = true
+	case fmt.Sprintf("%s OFF", twoStepCompare):
+		su.config.twoStepCompare = false
 	default:
 		return su.errState(ctx, errors.New("invalid configuration"))
 	}
@@ -188,7 +238,7 @@ func (su *singleUser) stateBattle(ctx context.Context, message string) (telegram
 		return su.fallbackToFloat(ctx, message)
 	}
 
-	if su.config.fastCompare {
+	if !su.config.twoStepCompare {
 		return su.startState(ctx, randomCompare)
 	}
 	return su.rankMessage(ctx, score)
@@ -215,11 +265,13 @@ func (su *singleUser) getButtonText() (map[string]float64, []string, error) {
 }
 
 func (su *singleUser) importState(ctx context.Context, message string) (telegram.Response, stateFunc) {
-	if err := su.importList(context.Background(), message); err != nil {
+	str, err := su.importList(ctx, message)
+	if err != nil {
 		return su.errState(ctx, err)
 	}
 
-	return su.Reset(ctx), su.startState
+	return telegram.NewMultiResponse(telegram.NewTextResponse(str, true),
+		su.Reset(ctx)), su.startState
 }
 
 func (su *singleUser) getComparableItems(ctx context.Context) error {
@@ -268,29 +320,68 @@ func (su *singleUser) page(ctx context.Context, page, count int) ([]*db.Item, er
 	return su.storage.Items(ctx, su.userID, su.category.GetID(), page, count)
 }
 
-func (su *singleUser) importList(ctx context.Context, username string) error {
+func (su *singleUser) findList(ctx context.Context, all []*db.Category, list string) (*db.Category, error) {
+	for i := range all {
+		if all[i].Name == list {
+			return all[i], nil
+		}
+	}
+
+	cat := db.Category{
+		UserID:      su.userID,
+		Name:        list,
+		Description: "",
+	}
+
+	return su.storage.CreateCategory(ctx, &cat)
+}
+
+func (su *singleUser) importList(ctx context.Context, username string) (string, error) {
 	bgg := gobgg.NewBGGClient()
-	things, err := bgg.GetCollection(ctx, username, gobgg.SetCollectionTypes(gobgg.CollectionTypeWishList))
+
+	var result []string
+	cats, err := su.storage.Categories(ctx, su.userID)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	for i := range things {
-		item := db.Item{
-			ID:          0,
-			UserID:      su.userID,
-			Name:        things[i].Name,
-			Description: strings.Trim(things[i].Description, "\n\t "),
-			URL:         fmt.Sprintf("https://boardgamegeek.com/boardgame/%d/", things[i].ID),
-			Image:       "",
+	for i := range defaultLists {
+		things, err := bgg.GetCollection(ctx, username, gobgg.SetCollectionTypes(defaultLists[i]))
+		if err != nil {
+			return "", err
 		}
 
-		if _, err := su.storage.Create(ctx, &item); err != nil {
-			log.Println("Already there")
+		if len(things) < 0 {
+			continue
 		}
+
+		cat, err := su.findList(ctx, cats, i)
+		if err != nil {
+			return "", err
+		}
+
+		count, old := len(things), 0
+		for i := range things {
+			item := db.Item{
+				UserID:      su.userID,
+				Category:    cat.ID,
+				Name:        things[i].Name,
+				Description: strings.Trim(things[i].Description, "\n\t "),
+				URL:         fmt.Sprintf("https://boardgamegeek.com/boardgame/%d/", things[i].ID),
+				Image:       "",
+			}
+
+			if _, err := su.storage.Create(ctx, &item); err != nil {
+				log.Println("Already there")
+				old++
+			}
+		}
+
+		result = append(result,
+			fmt.Sprintf("%d items was in your %q list, %d was new", count, cat.Name, count-old))
 	}
 
-	return nil
+	return strings.Join(result, "\n"), nil
 }
 
 // NewChat creates a new telegram chat

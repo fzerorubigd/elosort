@@ -5,6 +5,7 @@ go 1.15
 require (
 	github.com/fzerorubigd/clictx v1.1.0
 	github.com/fzerorubigd/gobgg v0.0.2
+	github.com/go-acme/lego v2.7.2+incompatible
 	github.com/go-playground/validator/v10 v10.4.1
 	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible
 	github.com/jmoiron/sqlx v1.2.0
@@ -17,6 +18,6 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/technoweenie/multipartstreamer v1.0.1 // indirect
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
-	golang.org/x/sys v0.0.0-20201223074533-0d417f636930 // indirect
+	golang.org/x/sys v0.0.0-20201231184435-2d18734c6014 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 )
