@@ -142,7 +142,7 @@ func (s *storage) Remove(ctx context.Context, id int64) error {
 	return errors.Wrap(err, "failed to delete the item")
 }
 
-func (s *storage) initialize(ctx context.Context) error {
+func (s *storage) initialize(_ context.Context) error {
 	_, err := migrate.Exec(s.db.DB, "sqlite3", migrations, migrate.Up)
 	return errors.Wrap(err, "migration failed")
 }

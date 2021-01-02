@@ -156,8 +156,11 @@ func (su *singleUser) setCategory(ctx context.Context, message string) (telegram
 		for i := range cats {
 			data = append(data, cats[i].Name)
 		}
-
-		return telegram.NewButtonResponse("Select the category", data...), su.setCategory
+		cat := "Not selected"
+		if su.category != nil {
+			cat = su.category.Name
+		}
+		return telegram.NewButtonResponse("Select the category, current active is: "+cat, data...), su.setCategory
 	}
 
 	for i := range cats {
@@ -209,7 +212,7 @@ func (su *singleUser) afterBattle(ctx context.Context, message string) (telegram
 	case another:
 		return su.startState(ctx, randomCompare)
 	default:
-		return su.Reset(ctx), su.startState
+		return su.resetText(ctx, chooseOne), su.startState
 	}
 }
 
@@ -218,14 +221,15 @@ func (su *singleUser) rankMessage(ctx context.Context, score float64) (telegram.
 	if err != nil {
 		return su.errState(ctx, err)
 	}
-
+	if !su.config.twoStepCompare {
+		return su.afterBattle(ctx, another)
+	}
 	return telegram.NewButtonResponse(text, another, cancel), su.afterBattle
-
 }
 
 func (su *singleUser) stateBattle(ctx context.Context, message string) (telegram.Response, stateFunc) {
 	if message == cancel {
-		return su.Reset(ctx), su.startState
+		return su.resetText(ctx, chooseOne), su.startState
 	}
 	texts, _, err := su.getButtonText()
 	if err != nil {
@@ -238,9 +242,6 @@ func (su *singleUser) stateBattle(ctx context.Context, message string) (telegram
 		return su.fallbackToFloat(ctx, message)
 	}
 
-	if !su.config.twoStepCompare {
-		return su.startState(ctx, randomCompare)
-	}
 	return su.rankMessage(ctx, score)
 }
 
@@ -271,7 +272,7 @@ func (su *singleUser) importState(ctx context.Context, message string) (telegram
 	}
 
 	return telegram.NewMultiResponse(telegram.NewTextResponse(str, true),
-		su.Reset(ctx)), su.startState
+		su.resetText(ctx, chooseOne)), su.startState
 }
 
 func (su *singleUser) getComparableItems(ctx context.Context) error {
