@@ -104,7 +104,6 @@ func (s *SQLiteTestSuit) TestAddItem() {
 	s.Require().NotEqual(randoms[1], randoms[0])
 }
 
-
 func (s *SQLiteTestSuit) TestCategory() {
 	cat := &db.Category{
 		UserID:      100,
@@ -124,7 +123,34 @@ func (s *SQLiteTestSuit) TestCategory() {
 	_, err = s.dbx.CreateCategory(ctx, cat2)
 	s.Require().Error(err)
 
-	cats , err := s.dbx.Categories(ctx, 100)
+	cats, err := s.dbx.Categories(ctx, 100)
 	s.Require().Error(err)
 	s.Assert().Equal([]*db.Category{cat, cat2}, cats)
+}
+
+func (s *SQLiteTestSuit) TestUser() {
+	usr := &db.User{
+		ID: 100,
+		Config: &db.UserConfig{
+			DefaultCatID: 10000,
+			ShowTwoStep:  true,
+		},
+	}
+	ctx := context.Background()
+	s.Require().NoError(s.dbx.CreateUser(ctx, usr))
+
+	usr2, err := s.dbx.UserByID(ctx, usr.ID)
+	s.Require().NoError(err)
+
+	s.Assert().Equal(usr, usr2)
+
+	usr.Config.DefaultCatID = 11
+	usr.Config.ShowTwoStep = false
+
+	s.Require().NoError(s.dbx.UpdateConfig(ctx, usr))
+
+	usr2, err = s.dbx.UserByID(ctx, usr.ID)
+	s.Require().NoError(err)
+
+	s.Assert().Equal(usr, usr2)
 }

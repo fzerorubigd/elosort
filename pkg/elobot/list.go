@@ -18,16 +18,15 @@ import (
 type stateFunc func(ctx context.Context, message string) (telegram.Response, stateFunc)
 
 const (
-	chooseOne       = "Choose one"
-	importList      = "Import board game list"
-	randomCompare   = "Random compare"
-	top20           = "Top 20"
-	settings        = "Settings"
-	cancel          = "Cancel"
-	twoStepCompare  = "Two step compare"
-	another         = "Another"
-	defaultCategory = "Default Category"
-	selectCategory  = "Select Active Category"
+	chooseOne      = "Choose one"
+	importList     = "Import board game list"
+	randomCompare  = "Random compare"
+	top20          = "Top 20"
+	settings       = "Settings"
+	cancel         = "Cancel"
+	twoStepCompare = "Two step compare"
+	another        = "Another"
+	selectCategory = "Select Active Category"
 )
 
 var defaultLists = map[string]gobgg.CollectionType{

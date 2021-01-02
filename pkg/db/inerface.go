@@ -16,5 +16,8 @@ type Storage interface {
 	Items(ctx context.Context, userID, category int64, page, count int) ([]*Item, error)
 	Categories(ctx context.Context, userID int64) ([]*Category, error)
 	Random(ctx context.Context, userID, category int64, count int) ([]*Item, error)
+	UserByID(ctx context.Context, id int64) (*User, error)
+	CreateUser(ctx context.Context, usr *User) error
+	UpdateConfig(ctx context.Context, usr *User) error
 	io.Closer
 }

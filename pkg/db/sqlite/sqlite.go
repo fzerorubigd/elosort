@@ -142,6 +142,27 @@ func (s *storage) Remove(ctx context.Context, id int64) error {
 	return errors.Wrap(err, "failed to delete the item")
 }
 
+func (s *storage) UserByID(ctx context.Context, id int64) (*db.User, error) {
+	q := "SELECT * FROM users WHERE id = $1"
+	var usr db.User
+	if err := s.db.GetContext(ctx, &usr, q, id); err != nil {
+		return nil, err
+	}
+
+	return &usr, nil
+}
+
+func (s *storage) CreateUser(ctx context.Context, usr *db.User) error {
+	_, err := s.db.NamedExecContext(ctx,
+		"INSERT INTO users (id, config) VALUES (:id, :config)", usr)
+	return errors.Wrap(err, "insert failed")
+}
+
+func (s *storage) UpdateConfig(ctx context.Context, usr *db.User) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE users SET config = $1 WHERE id = $2", usr.Config, usr.ID)
+	return errors.Wrap(err, "update failed")
+}
+
 func (s *storage) initialize(_ context.Context) error {
 	_, err := migrate.Exec(s.db.DB, "sqlite3", migrations, migrate.Up)
 	return errors.Wrap(err, "migration failed")

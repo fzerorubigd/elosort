@@ -64,5 +64,22 @@ drop index categories_user_id_name_uindex;
 
 drop table categories;
 `,
+		`
+-- +migrate Up
+-- SQL in section 'Up' is executed when this migration is applied
+
+create table users (
+	id          integer 
+        constraint items_pk 
+            primary key,
+    config TEXT default ''
+);
+
+-- +migrate Down
+-- SQL section 'Down' is executed when this migration is rolled back
+
+drop table users;
+
+`,
 	}
 )
