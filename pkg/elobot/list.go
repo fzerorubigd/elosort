@@ -99,8 +99,11 @@ func (su *singleUser) startState(ctx context.Context, message string) (telegram.
 		if err != nil {
 			return su.errState(ctx, err)
 		}
-
-		text := "Your top ten list:\n"
+		cat := "Unknown"
+		if su.category != nil {
+			cat = su.category.Name
+		}
+		text := fmt.Sprintf("Your top ten list (Category: %s):\n", cat)
 		for i := range items {
 			text += fmt.Sprintf("%d => %s\n%s\n", items[i].Rank, items[i].Name, items[i].URL)
 		}
