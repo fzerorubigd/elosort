@@ -41,7 +41,7 @@ func main() {
 
 	ranker := elo.NewEloRankerDefault()
 	telegram.InitLibrary(func(cahtID int64) telegram.Menu {
-		return elobot.NewChat(cahtID, ranker, s)
+		return elobot.NewChat(ctx, cahtID, ranker, s)
 	})
 
 	bot, err := tgbotapi.NewBotAPI(token)

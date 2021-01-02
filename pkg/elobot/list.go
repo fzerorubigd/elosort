@@ -46,9 +46,7 @@ type singleUser struct {
 
 	category *db.Category
 
-	config struct {
-		twoStepCompare bool
-	}
+	config *db.UserConfig
 
 	state stateFunc
 }
@@ -67,10 +65,23 @@ func (su *singleUser) resetText(_ context.Context, text string) telegram.Respons
 
 func (su *singleUser) Reset(ctx context.Context) telegram.Response {
 	var err error
-	su.category, err = su.storage.GetCategoryByName(ctx, su.userID, "Wishlist")
-	if err != nil {
-		log.Print(err)
+	if su.config.DefaultCatID == 0 {
+		su.category, err = su.storage.GetCategoryByName(ctx, su.userID, "Wishlist")
+		if err != nil {
+			log.Print(err)
+		}
+
+		su.config.DefaultCatID = su.category.GetID()
+		if err := su.storage.UpdateConfig(ctx, su.userID, su.config); err != nil {
+			log.Print(err)
+		}
+	} else {
+		su.category, err = su.storage.GetCategoryByID(ctx, su.config.DefaultCatID)
+		if err != nil {
+			log.Print(err)
+		}
 	}
+
 	return su.resetText(ctx, chooseOne)
 }
 
@@ -129,7 +140,11 @@ func (su *singleUser) startState(ctx context.Context, message string) (telegram.
 		}
 
 		buttons = append(buttons, cancel)
-		items3 := telegram.NewButtonResponse("Choose one option or enter a number between 0-100:", buttons...)
+		cat := "Unknown"
+		if su.category != nil {
+			cat = su.category.Name
+		}
+		items3 := telegram.NewButtonResponse(fmt.Sprintf("This is your %q \nChoose one option or enter a number between 0-100:", cat), buttons...)
 		return telegram.NewMultiResponse(item1, item2, items3), su.stateBattle
 	case selectCategory:
 		return su.setCategory(ctx, "")
@@ -151,7 +166,7 @@ func (su *singleUser) setCategory(ctx context.Context, message string) (telegram
 	}
 
 	var (
-		data = make([]string, 0, len(cats))
+		data = make([]string, 0, len(cats)+1)
 	)
 
 	if message == "" {
@@ -162,12 +177,21 @@ func (su *singleUser) setCategory(ctx context.Context, message string) (telegram
 		if su.category != nil {
 			cat = su.category.Name
 		}
+		data = append(data, cancel)
 		return telegram.NewButtonResponse("Select the category, current active is: "+cat, data...), su.setCategory
+	}
+
+	if message == cancel {
+		return su.resetText(ctx, "Nothing was changed"), su.startState
 	}
 
 	for i := range cats {
 		if message == cats[i].Name {
 			su.category = cats[i]
+			su.config.DefaultCatID = cats[i].ID
+			if err := su.storage.UpdateConfig(ctx, su.userID, su.config); err != nil {
+				log.Print(err)
+			}
 			return su.resetText(ctx, fmt.Sprintf("Active category is %s", su.category.Name)), su.startState
 		}
 	}
@@ -178,7 +202,7 @@ func (su *singleUser) setCategory(ctx context.Context, message string) (telegram
 func (su *singleUser) setConfig(ctx context.Context, message string) (telegram.Response, stateFunc) {
 	if message == "" {
 		status := "ON"
-		if su.config.twoStepCompare {
+		if su.config.ShowTwoStep {
 			status = "OFF"
 		}
 		return telegram.NewButtonResponse("Set config", fmt.Sprintf("%s %s", twoStepCompare, status), cancel), su.setConfig
@@ -187,11 +211,15 @@ func (su *singleUser) setConfig(ctx context.Context, message string) (telegram.R
 	case cancel:
 		return su.resetText(ctx, "Nothing was changed"), su.startState
 	case fmt.Sprintf("%s ON", twoStepCompare):
-		su.config.twoStepCompare = true
+		su.config.ShowTwoStep = true
 	case fmt.Sprintf("%s OFF", twoStepCompare):
-		su.config.twoStepCompare = false
+		su.config.ShowTwoStep = false
 	default:
 		return su.errState(ctx, errors.New("invalid configuration"))
+	}
+
+	if err := su.storage.UpdateConfig(ctx, su.userID, su.config); err != nil {
+		log.Print(err)
 	}
 
 	return su.resetText(ctx, "Config set was successful"), su.startState
@@ -223,7 +251,7 @@ func (su *singleUser) rankMessage(ctx context.Context, score float64) (telegram.
 	if err != nil {
 		return su.errState(ctx, err)
 	}
-	if !su.config.twoStepCompare {
+	if !su.config.ShowTwoStep {
 		return su.afterBattle(ctx, another)
 	}
 	return telegram.NewButtonResponse(text, another, cancel), su.afterBattle
@@ -388,10 +416,22 @@ func (su *singleUser) importList(ctx context.Context, username string) (string, 
 }
 
 // NewChat creates a new telegram chat
-func NewChat(userID int64, ranker ranking.Ranker, storage db.Storage) *singleUser {
+func NewChat(ctx context.Context, userID int64, ranker ranking.Ranker, storage db.Storage) *singleUser {
+	usr, err := storage.UserByID(ctx, userID)
+	if err != nil {
+		log.Print("New user?")
+		usr = &db.User{
+			ID:     userID,
+			Config: &db.UserConfig{},
+		}
+		if err := storage.CreateUser(ctx, usr); err != nil {
+			log.Print(err)
+		}
+	}
 	return &singleUser{
 		userID:  userID,
 		ranker:  ranker,
 		storage: storage,
+		config:  usr.Config,
 	}
 }

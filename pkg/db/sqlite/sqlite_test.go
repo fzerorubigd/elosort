@@ -113,7 +113,15 @@ func (s *SQLiteTestSuit) TestCategory() {
 
 	ctx := context.Background()
 	_, err := s.dbx.CreateCategory(ctx, cat)
-	s.Require().Error(err)
+	s.Require().NoError(err)
+
+	getCat, err := s.dbx.GetCategoryByName(ctx, cat.UserID, cat.Name)
+	s.Require().NoError(err)
+	s.Assert().Equal(cat, getCat)
+
+	getCat, err = s.dbx.GetCategoryByID(ctx, cat.ID)
+	s.Require().NoError(err)
+	s.Assert().Equal(cat, getCat)
 
 	cat2 := &db.Category{
 		UserID:      100,
@@ -121,10 +129,10 @@ func (s *SQLiteTestSuit) TestCategory() {
 		Description: "",
 	}
 	_, err = s.dbx.CreateCategory(ctx, cat2)
-	s.Require().Error(err)
+	s.Require().NoError(err)
 
 	cats, err := s.dbx.Categories(ctx, 100)
-	s.Require().Error(err)
+	s.Require().NoError(err)
 	s.Assert().Equal([]*db.Category{cat, cat2}, cats)
 }
 
@@ -147,7 +155,7 @@ func (s *SQLiteTestSuit) TestUser() {
 	usr.Config.DefaultCatID = 11
 	usr.Config.ShowTwoStep = false
 
-	s.Require().NoError(s.dbx.UpdateConfig(ctx, usr))
+	s.Require().NoError(s.dbx.UpdateConfig(ctx, usr.ID, usr.Config))
 
 	usr2, err = s.dbx.UserByID(ctx, usr.ID)
 	s.Require().NoError(err)

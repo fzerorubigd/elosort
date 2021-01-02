@@ -152,14 +152,24 @@ func (s *storage) UserByID(ctx context.Context, id int64) (*db.User, error) {
 	return &usr, nil
 }
 
+func (s *storage) GetCategoryByID(ctx context.Context, id int64) (*db.Category, error) {
+	q := "SELECT * FROM categories WHERE id = $1"
+	var cat db.Category
+	if err := s.db.GetContext(ctx, &cat, q, id); err != nil {
+		return nil, err
+	}
+
+	return &cat, nil
+}
+
 func (s *storage) CreateUser(ctx context.Context, usr *db.User) error {
 	_, err := s.db.NamedExecContext(ctx,
 		"INSERT INTO users (id, config) VALUES (:id, :config)", usr)
 	return errors.Wrap(err, "insert failed")
 }
 
-func (s *storage) UpdateConfig(ctx context.Context, usr *db.User) error {
-	_, err := s.db.ExecContext(ctx, "UPDATE users SET config = $1 WHERE id = $2", usr.Config, usr.ID)
+func (s *storage) UpdateConfig(ctx context.Context,  id int64, config *db.UserConfig) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE users SET config = $1 WHERE id = $2", config, id)
 	return errors.Wrap(err, "update failed")
 }
 
