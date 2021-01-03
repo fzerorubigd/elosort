@@ -20,5 +20,6 @@ type Storage interface {
 	UserByID(ctx context.Context, id int64) (*User, error)
 	CreateUser(ctx context.Context, usr *User) error
 	UpdateConfig(ctx context.Context, id int64, config *UserConfig) error
+	Remove(ctx context.Context, id int64) error
 	io.Closer
 }

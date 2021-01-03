@@ -21,12 +21,15 @@ const (
 	chooseOne      = "Choose one"
 	importList     = "Import board game list"
 	randomCompare  = "Random compare"
+	manageItems    = "Manage items"
 	top20          = "Top 20"
 	settings       = "Settings"
 	cancel         = "Cancel"
 	twoStepCompare = "Two step compare"
 	another        = "Another"
 	selectCategory = "Select Active Category"
+	yesAction      = "Yes"
+	noAction       = "No"
 )
 
 var defaultLists = map[string]gobgg.CollectionType{
@@ -139,7 +142,7 @@ func (su *singleUser) startState(ctx context.Context, message string) (telegram.
 			return su.errState(ctx, err)
 		}
 
-		buttons = append(buttons, cancel)
+		buttons = append(buttons, manageItems, cancel)
 		cat := "Unknown"
 		if su.category != nil {
 			cat = su.category.Name
@@ -257,10 +260,51 @@ func (su *singleUser) rankMessage(ctx context.Context, score float64) (telegram.
 	return telegram.NewButtonResponse(text, another, cancel), su.afterBattle
 }
 
+func (su *singleUser) manageState(ctx context.Context, message string) (telegram.Response, stateFunc) {
+	buttons := []string{
+		fmt.Sprintf("Delete %q", su.left.Name),
+		fmt.Sprintf("Delete %q", su.right.Name),
+		cancel,
+	}
+	if message == "" {
+		return telegram.NewButtonResponse("Select one to remove: ", buttons...), su.manageState
+	}
+
+	if message == cancel {
+		return su.startState(ctx, randomCompare)
+	}
+
+	var active *db.Item
+	if message == buttons[0] {
+		active = su.left
+	} else if message == buttons[1] {
+		active = su.right
+	}
+
+	if active == nil {
+		return su.startState(ctx, randomCompare)
+	}
+
+	return telegram.NewButtonResponse("Are you sure? this can't be undone", yesAction, noAction),
+		func(ctx context.Context, message string) (telegram.Response, stateFunc) {
+			if message == yesAction {
+				if err := su.storage.Remove(ctx, active.ID); err != nil {
+					log.Print(err)
+				}
+			}
+			return su.startState(ctx, randomCompare)
+		}
+}
+
 func (su *singleUser) stateBattle(ctx context.Context, message string) (telegram.Response, stateFunc) {
 	if message == cancel {
 		return su.resetText(ctx, chooseOne), su.startState
 	}
+
+	if message == manageItems {
+		return su.manageState(ctx, "")
+	}
+
 	texts, _, err := su.getButtonText()
 	if err != nil {
 		return su.errState(ctx, err)
