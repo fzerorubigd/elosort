@@ -18,25 +18,44 @@ import (
 type stateFunc func(ctx context.Context, message string) (telegram.Response, stateFunc)
 
 const (
-	chooseOne      = "Choose one"
-	importList     = "Import board game list"
-	randomCompare  = "Random compare"
-	manageItems    = "Manage items"
-	top20          = "Top 20"
-	settings       = "Settings"
-	cancel         = "Cancel"
-	twoStepCompare = "Two step compare"
-	another        = "Another"
-	selectCategory = "Select Active Category"
-	yesAction      = "Yes"
-	noAction       = "No"
+	chooseOne            = "Select one option:"
+	importList           = "Import board game list from bgg"
+	randomCompare        = "Random compare"
+	manageItems          = "Manage items"
+	top20                = "Top 20"
+	settings             = "Settings"
+	cancel               = "Cancel"
+	twoStepCompare       = "Two step compare"
+	setLanguage          = "Set language"
+	another              = "Next"
+	selectCategory       = "Select Active Category"
+	yesAction            = "Yes"
+	noAction             = "No"
+	yourUserName         = "Your BGG username:"
+	yourTopTenList       = "Your top ten list (Category: %s):\n"
+	chooseOption         = "This is your %q \nChoose one option or enter a number between 0-100:"
+	invalidInput         = "Invalid input"
+	importFirst          = "No category, import board games first"
+	nothingWasChanged    = "Nothing was changed"
+	selectActiveCategory = "Select the category, current active is: "
+	configSaved          = "Config saved"
+	wishList             = "Wishlist"
+	own                  = "Own"
+	played               = "Played"
+	rated                = "Rated"
+	unknown              = "Unknown"
+	deleteItem           = "Delete %q"
+	compareString        = "%s is %d%% winner"
+	equal                = "Equal"
+	itemsInYourList      = "%d items was in your %q list, %d was new"
+	areYouSure           = "Are you sure? this can't be undone"
 )
 
 var defaultLists = map[string]gobgg.CollectionType{
-	"Wishlist": gobgg.CollectionTypeWishList,
-	"Own":      gobgg.CollectionTypeOwn,
-	"Played":   gobgg.CollectionTypePlayed,
-	"Rated":    gobgg.CollectionTypeRated,
+	wishList: gobgg.CollectionTypeWishList,
+	own:      gobgg.CollectionTypeOwn,
+	played:   gobgg.CollectionTypePlayed,
+	rated:    gobgg.CollectionTypeRated,
 }
 
 type singleUser struct {
@@ -49,33 +68,50 @@ type singleUser struct {
 
 	category *db.Category
 
-	config *db.UserConfig
+	config db.UserConfig
 
 	state stateFunc
+}
+
+func (su *singleUser) translate(in string) string {
+	if su.config.Language == "" {
+		su.config.Language = "En"
+	}
+
+	return t(in, su.config.Language)
+}
+
+func (su *singleUser) translateArray(in ...string) []string {
+	out := make([]string, len(in))
+	for i := range in {
+		out[i] = su.translate(in[i])
+	}
+
+	return out
 }
 
 func (su *singleUser) resetText(_ context.Context, text string) telegram.Response {
 	su.left, su.right = nil, nil
 	su.state = su.startState
 	return telegram.NewButtonResponse(text,
-		importList,
-		randomCompare,
-		top20,
-		selectCategory,
-		settings,
+		su.translateArray(importList,
+			randomCompare,
+			top20,
+			selectCategory,
+			settings)...,
 	)
 }
 
 func (su *singleUser) Reset(ctx context.Context) telegram.Response {
 	var err error
 	if su.config.DefaultCatID == 0 {
-		su.category, err = su.storage.GetCategoryByName(ctx, su.userID, "Wishlist")
+		su.category, err = su.storage.GetCategoryByName(ctx, su.userID, wishList)
 		if err != nil {
 			log.Print(err)
 		}
 
 		su.config.DefaultCatID = su.category.GetID()
-		if err := su.storage.UpdateConfig(ctx, su.userID, su.config); err != nil {
+		if err := su.storage.UpdateConfig(ctx, su.userID, &su.config); err != nil {
 			log.Print(err)
 		}
 	} else {
@@ -85,7 +121,7 @@ func (su *singleUser) Reset(ctx context.Context) telegram.Response {
 		}
 	}
 
-	return su.resetText(ctx, chooseOne)
+	return su.resetText(ctx, su.translate(chooseOne))
 }
 
 func (su *singleUser) Process(ctx context.Context, message string) telegram.Response {
@@ -105,25 +141,25 @@ func (su *singleUser) errState(ctx context.Context, err error) (telegram.Respons
 
 func (su *singleUser) startState(ctx context.Context, message string) (telegram.Response, stateFunc) {
 	switch message {
-	case importList:
-		return telegram.NewTextResponse("Your user name:", true), su.importState
-	case top20:
+	case su.translate(importList):
+		return telegram.NewTextResponse(su.translate(yourUserName), true), su.importState
+	case su.translate(top20):
 		items, err := su.page(context.Background(), 1, 20)
 		if err != nil {
 			return su.errState(ctx, err)
 		}
-		cat := "Unknown"
+		cat := su.translate(unknown)
 		if su.category != nil {
-			cat = su.category.Name
+			cat = su.translate(su.category.Name)
 		}
-		text := fmt.Sprintf("Your top ten list (Category: %s):\n", cat)
+		text := fmt.Sprintf(su.translate(yourTopTenList), cat)
 		for i := range items {
 			text += fmt.Sprintf("%d => %s\n%s\n", items[i].Rank, items[i].Name, items[i].URL)
 		}
 
 		return su.resetText(ctx, text), su.startState
-	case randomCompare:
-		if err := su.getComparableItems(context.Background()); err != nil {
+	case su.translate(randomCompare):
+		if err := su.getComparableItems(ctx); err != nil {
 			return su.errState(ctx, err)
 		}
 
@@ -142,19 +178,20 @@ func (su *singleUser) startState(ctx context.Context, message string) (telegram.
 			return su.errState(ctx, err)
 		}
 
-		buttons = append(buttons, manageItems, cancel)
-		cat := "Unknown"
+		buttons = append(buttons, su.translateArray(manageItems, cancel)...)
+		cat := su.translate(unknown)
 		if su.category != nil {
-			cat = su.category.Name
+			cat = su.translate(su.category.Name)
 		}
-		items3 := telegram.NewButtonResponse(fmt.Sprintf("This is your %q \nChoose one option or enter a number between 0-100:", cat), buttons...)
+		items3 := telegram.NewButtonResponse(
+			fmt.Sprintf(su.translate(chooseOption), cat), buttons...)
 		return telegram.NewMultiResponse(item1, item2, items3), su.stateBattle
-	case selectCategory:
+	case su.translate(selectCategory):
 		return su.setCategory(ctx, "")
-	case settings:
+	case su.translate(settings):
 		return su.setConfig(ctx, "")
 	default:
-		return telegram.NewTextResponse("invalid input", false), su.startState
+		return telegram.NewTextResponse(su.translate(invalidInput), false), su.startState
 	}
 }
 
@@ -165,7 +202,7 @@ func (su *singleUser) setCategory(ctx context.Context, message string) (telegram
 	}
 
 	if len(cats) == 0 {
-		return su.resetText(ctx, "No category, import board games first"), su.startState
+		return su.resetText(ctx, su.translate(importFirst)), su.startState
 	}
 
 	var (
@@ -176,30 +213,30 @@ func (su *singleUser) setCategory(ctx context.Context, message string) (telegram
 		for i := range cats {
 			data = append(data, cats[i].Name)
 		}
-		cat := "Not selected"
+		cat := su.translate(unknown)
 		if su.category != nil {
-			cat = su.category.Name
+			cat = su.translate(su.category.Name)
 		}
-		data = append(data, cancel)
-		return telegram.NewButtonResponse("Select the category, current active is: "+cat, data...), su.setCategory
+		data = append(data, su.translate(cancel))
+		return telegram.NewButtonResponse(su.translate(selectActiveCategory)+cat, data...), su.setCategory
 	}
 
-	if message == cancel {
-		return su.resetText(ctx, "Nothing was changed"), su.startState
+	if message == su.translate(cancel) {
+		return su.resetText(ctx, su.translate(nothingWasChanged)), su.startState
 	}
 
 	for i := range cats {
-		if message == cats[i].Name {
+		if message == su.translate(cats[i].Name) {
 			su.category = cats[i]
 			su.config.DefaultCatID = cats[i].ID
-			if err := su.storage.UpdateConfig(ctx, su.userID, su.config); err != nil {
+			if err := su.storage.UpdateConfig(ctx, su.userID, &su.config); err != nil {
 				log.Print(err)
 			}
-			return su.resetText(ctx, fmt.Sprintf("Active category is %s", su.category.Name)), su.startState
+			return su.resetText(ctx, fmt.Sprintf(su.translate("Active category is %s"), su.category.Name)), su.startState
 		}
 	}
 
-	return su.resetText(ctx, "Invalid category name"), su.startState
+	return su.resetText(ctx, su.translate("Invalid category name")), su.startState
 }
 
 func (su *singleUser) setConfig(ctx context.Context, message string) (telegram.Response, stateFunc) {
@@ -208,33 +245,46 @@ func (su *singleUser) setConfig(ctx context.Context, message string) (telegram.R
 		if su.config.ShowTwoStep {
 			status = "OFF"
 		}
-		return telegram.NewButtonResponse("Set config", fmt.Sprintf("%s %s", twoStepCompare, status), cancel), su.setConfig
+		lang := "Fa"
+		if su.config.Language == "Fa" {
+			lang = "En"
+		}
+		return telegram.NewButtonResponse(
+				su.translate("Set config"),
+				fmt.Sprintf("%s %s", su.translate(twoStepCompare), status),
+				fmt.Sprintf("%s %s", su.translate(setLanguage), lang),
+				su.translate(cancel)),
+			su.setConfig
 	}
 	switch message {
-	case cancel:
-		return su.resetText(ctx, "Nothing was changed"), su.startState
-	case fmt.Sprintf("%s ON", twoStepCompare):
+	case su.translate(cancel):
+		return su.resetText(ctx, su.translate(nothingWasChanged)), su.startState
+	case fmt.Sprintf("%s ON", su.translate(twoStepCompare)):
 		su.config.ShowTwoStep = true
-	case fmt.Sprintf("%s OFF", twoStepCompare):
+	case fmt.Sprintf("%s OFF", su.translate(twoStepCompare)):
 		su.config.ShowTwoStep = false
+	case fmt.Sprintf("%s Fa", su.translate(setLanguage)):
+		su.config.Language = "Fa"
+	case fmt.Sprintf("%s En", su.translate(setLanguage)):
+		su.config.Language = "En"
 	default:
 		return su.errState(ctx, errors.New("invalid configuration"))
 	}
 
-	if err := su.storage.UpdateConfig(ctx, su.userID, su.config); err != nil {
+	if err := su.storage.UpdateConfig(ctx, su.userID, &su.config); err != nil {
 		log.Print(err)
 	}
 
-	return su.resetText(ctx, "Config set was successful"), su.startState
+	return su.resetText(ctx, su.translate(configSaved)), su.startState
 }
 
 func (su *singleUser) fallbackToFloat(ctx context.Context, message string) (telegram.Response, stateFunc) {
 	score, err := strconv.ParseFloat(message, 64)
 	if err != nil {
-		return telegram.NewTextResponse("Input one option", false), su.stateBattle
+		return telegram.NewTextResponse(su.translate(chooseOne), false), su.stateBattle
 	}
 	if score < 0 || score > 100 {
-		return telegram.NewTextResponse("Score should be between [0-100] or input one option", false), su.stateBattle
+		return telegram.NewTextResponse(chooseOption, false), su.stateBattle
 	}
 
 	return su.rankMessage(ctx, score/100)
@@ -242,10 +292,10 @@ func (su *singleUser) fallbackToFloat(ctx context.Context, message string) (tele
 
 func (su *singleUser) afterBattle(ctx context.Context, message string) (telegram.Response, stateFunc) {
 	switch message {
-	case another:
-		return su.startState(ctx, randomCompare)
+	case su.translate(another):
+		return su.startState(ctx, su.translate(randomCompare))
 	default:
-		return su.resetText(ctx, chooseOne), su.startState
+		return su.resetText(ctx, su.translate(chooseOne)), su.startState
 	}
 }
 
@@ -255,23 +305,23 @@ func (su *singleUser) rankMessage(ctx context.Context, score float64) (telegram.
 		return su.errState(ctx, err)
 	}
 	if !su.config.ShowTwoStep {
-		return su.afterBattle(ctx, another)
+		return su.afterBattle(ctx, su.translate(another))
 	}
-	return telegram.NewButtonResponse(text, another, cancel), su.afterBattle
+	return telegram.NewButtonResponse(text, su.translateArray(another, cancel)...), su.afterBattle
 }
 
 func (su *singleUser) manageState(ctx context.Context, message string) (telegram.Response, stateFunc) {
 	buttons := []string{
-		fmt.Sprintf("Delete %q", su.left.Name),
-		fmt.Sprintf("Delete %q", su.right.Name),
-		cancel,
+		fmt.Sprintf(su.translate(deleteItem), su.left.Name),
+		fmt.Sprintf(su.translate(deleteItem), su.right.Name),
+		su.translate(cancel),
 	}
 	if message == "" {
 		return telegram.NewButtonResponse("Select one to remove: ", buttons...), su.manageState
 	}
 
-	if message == cancel {
-		return su.startState(ctx, randomCompare)
+	if message == su.translate(cancel) {
+		return su.startState(ctx, su.translate(randomCompare))
 	}
 
 	var active *db.Item
@@ -282,26 +332,26 @@ func (su *singleUser) manageState(ctx context.Context, message string) (telegram
 	}
 
 	if active == nil {
-		return su.startState(ctx, randomCompare)
+		return su.startState(ctx, su.translate(randomCompare))
 	}
 
-	return telegram.NewButtonResponse("Are you sure? this can't be undone", yesAction, noAction),
+	return telegram.NewButtonResponse(areYouSure, su.translateArray(yesAction, noAction)...),
 		func(ctx context.Context, message string) (telegram.Response, stateFunc) {
-			if message == yesAction {
+			if message == su.translate(yesAction) {
 				if err := su.storage.Remove(ctx, active.ID); err != nil {
 					log.Print(err)
 				}
 			}
-			return su.startState(ctx, randomCompare)
+			return su.startState(ctx, su.translate(randomCompare))
 		}
 }
 
 func (su *singleUser) stateBattle(ctx context.Context, message string) (telegram.Response, stateFunc) {
-	if message == cancel {
-		return su.resetText(ctx, chooseOne), su.startState
+	if message == su.translate(cancel) {
+		return su.resetText(ctx, su.translate(chooseOne)), su.startState
 	}
 
-	if message == manageItems {
+	if message == su.translate(manageItems) {
 		return su.manageState(ctx, "")
 	}
 
@@ -324,11 +374,11 @@ func (su *singleUser) getButtonText() (map[string]float64, []string, error) {
 		return nil, nil, errors.New("nothing selected")
 	}
 	items := []string{
-		fmt.Sprintf("%s is 100%% winner", su.left.Name),
-		fmt.Sprintf("%s is 75%% winner", su.left.Name),
-		"Equal",
-		fmt.Sprintf("%s is 75%% winner", su.right.Name),
-		fmt.Sprintf("%s is 100%% winner", su.right.Name),
+		fmt.Sprintf(su.translate(compareString), su.left.Name, 100),
+		fmt.Sprintf(su.translate(compareString), su.left.Name, 75),
+		su.translate(equal),
+		fmt.Sprintf(su.translate(compareString), su.right.Name, 100),
+		fmt.Sprintf(su.translate(compareString), su.right.Name, 75),
 	}
 
 	m := make(map[string]float64)
@@ -346,7 +396,7 @@ func (su *singleUser) importState(ctx context.Context, message string) (telegram
 	}
 
 	return telegram.NewMultiResponse(telegram.NewTextResponse(str, true),
-		su.resetText(ctx, chooseOne)), su.startState
+		su.resetText(ctx, su.translate(chooseOne))), su.startState
 }
 
 func (su *singleUser) getComparableItems(ctx context.Context) error {
@@ -453,7 +503,7 @@ func (su *singleUser) importList(ctx context.Context, username string) (string, 
 		}
 
 		result = append(result,
-			fmt.Sprintf("%d items was in your %q list, %d was new", count, cat.Name, count-old))
+			fmt.Sprintf(su.translate(itemsInYourList), count, su.translate(cat.Name), count-old))
 	}
 
 	return strings.Join(result, "\n"), nil
@@ -476,6 +526,6 @@ func NewChat(ctx context.Context, userID int64, ranker ranking.Ranker, storage d
 		userID:  userID,
 		ranker:  ranker,
 		storage: storage,
-		config:  usr.Config,
+		config:  *usr.Config,
 	}
 }

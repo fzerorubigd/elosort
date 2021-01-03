@@ -1,6 +1,8 @@
 # Wishlist battle
 
-**Note: this is a draft code. I just built this for my usage, so no test, general-purpose, or great program! it works only for board games, but you can add other things easily**
+**Note: this is a draft code. I just built this for my usage, so no test, 
+general-purpose, or great program (it is a shitty code, I know)! it works only for board games, but you 
+can add other things easily**
 
 ## Why?
 

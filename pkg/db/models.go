@@ -37,8 +37,9 @@ type User struct {
 
 // UserConfig is the user configuration to be stored in JSON format in db
 type UserConfig struct {
-	DefaultCatID int64 `json:"default_cat_id"`
-	ShowTwoStep  bool  `json:"show_two_step"`
+	DefaultCatID int64  `json:"default_cat_id"`
+	ShowTwoStep  bool   `json:"show_two_step"`
+	Language     string `json:"language"`
 }
 
 // Scan is to read the data from database
