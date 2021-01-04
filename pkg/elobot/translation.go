@@ -1,5 +1,39 @@
 package elobot
 
+const (
+	chooseOne            = "Select one option:"
+	importList           = "Import board game list from bgg"
+	randomCompare        = "Random compare"
+	manageItems          = "Manage items"
+	top20                = "Top 20"
+	settings             = "Settings"
+	cancel               = "Cancel"
+	twoStepCompare       = "Two step compare"
+	setLanguage          = "Set language"
+	another              = "Next"
+	selectCategory       = "Select Active Category"
+	yesAction            = "Yes"
+	noAction             = "No"
+	yourUserName         = "Your BGG username:"
+	yourTopTenList       = "Your top ten list (Category: %s):\n"
+	chooseOption         = "This is your %q \nChoose one option or enter a number between 0-100:"
+	invalidInput         = "Invalid input"
+	importFirst          = "No category, import board games first"
+	nothingWasChanged    = "Nothing was changed"
+	selectActiveCategory = "Select the category, current active is: "
+	configSaved          = "Config saved"
+	wishList             = "Wishlist"
+	own                  = "Own"
+	played               = "Played"
+	rated                = "Rated"
+	unknown              = "Unknown"
+	deleteItem           = "Delete %q"
+	compareString        = "%s is %d%% winner"
+	equal                = "Equal"
+	itemsInYourList      = "%d items was in your %q list, %d was new"
+	areYouSure           = "Are you sure? this can't be undone"
+)
+
 func translateFa(in string) string {
 	switch in {
 	case chooseOne:
