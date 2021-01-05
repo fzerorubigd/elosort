@@ -5,7 +5,7 @@ const (
 	importList           = "Import board game list from bgg"
 	randomCompare        = "Random compare"
 	manageItems          = "Manage items"
-	top20                = "Top 20"
+	topList              = "Top Ten"
 	settings             = "Settings"
 	cancel               = "Cancel"
 	twoStepCompare       = "Two step compare"
@@ -32,6 +32,7 @@ const (
 	equal                = "Equal"
 	itemsInYourList      = "%d items was in your %q list, %d was new"
 	areYouSure           = "Are you sure? this can't be undone"
+	activeCategoryIs     = "Active category is %q"
 )
 
 func translateFa(in string) string {
@@ -44,8 +45,8 @@ func translateFa(in string) string {
 		return "مقایسه اتفاقی"
 	case manageItems:
 		return "مدیریت آیتمها"
-	case top20:
-		return "بیست‌تای برتر"
+	case topList:
+		return "ده‌تای برتر"
 	case settings:
 		return "تنظیمات"
 	case cancel:
@@ -98,6 +99,8 @@ func translateFa(in string) string {
 		return "%d آیتم در لیست %q بود، %d آن جدید بود"
 	case areYouSure:
 		return "آیا مطمئنید؟ این کار قابل برگشت نیست"
+	case activeCategoryIs:
+		return "دسته بندی فعال : %q"
 	default:
 		return in
 	}

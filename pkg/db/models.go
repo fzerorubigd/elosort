@@ -40,6 +40,7 @@ type UserConfig struct {
 	DefaultCatID int64  `json:"default_cat_id"`
 	ShowTwoStep  bool   `json:"show_two_step"`
 	Language     string `json:"language"`
+	TopCount     int    `json:"top_count"`
 }
 
 // Scan is to read the data from database

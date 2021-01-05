@@ -62,7 +62,7 @@ func (su *singleUser) resetText(_ context.Context, text string) telegram.Respons
 	return telegram.NewButtonResponse(text,
 		su.translateArray(importList,
 			randomCompare,
-			top20,
+			topList,
 			selectCategory,
 			settings)...,
 	)
@@ -109,8 +109,12 @@ func (su *singleUser) startState(ctx context.Context, message string) (telegram.
 	switch message {
 	case su.translate(importList):
 		return telegram.NewTextResponse(su.translate(yourUserName), true), su.importState
-	case su.translate(top20):
-		items, err := su.page(context.Background(), 1, 20)
+	case su.translate(topList):
+		top := 10
+		if su.config.TopCount > 0 && su.config.TopCount < 50 {
+			top = su.config.TopCount
+		}
+		items, err := su.page(context.Background(), 1, top)
 		if err != nil {
 			return su.errState(ctx, err)
 		}
@@ -177,7 +181,7 @@ func (su *singleUser) setCategory(ctx context.Context, message string) (telegram
 
 	if message == "" {
 		for i := range cats {
-			data = append(data, cats[i].Name)
+			data = append(data, su.translate(cats[i].Name))
 		}
 		cat := su.translate(unknown)
 		if su.category != nil {
@@ -198,7 +202,7 @@ func (su *singleUser) setCategory(ctx context.Context, message string) (telegram
 			if err := su.storage.UpdateConfig(ctx, su.userID, &su.config); err != nil {
 				log.Print(err)
 			}
-			return su.resetText(ctx, fmt.Sprintf(su.translate("Active category is %s"), su.category.Name)), su.startState
+			return su.resetText(ctx, fmt.Sprintf(su.translate(activeCategoryIs), su.translate(su.category.Name))), su.startState
 		}
 	}
 
