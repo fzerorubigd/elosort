@@ -168,7 +168,7 @@ func (s *storage) CreateUser(ctx context.Context, usr *db.User) error {
 	return errors.Wrap(err, "insert failed")
 }
 
-func (s *storage) UpdateConfig(ctx context.Context,  id int64, config *db.UserConfig) error {
+func (s *storage) UpdateConfig(ctx context.Context, id int64, config *db.UserConfig) error {
 	_, err := s.db.ExecContext(ctx, "UPDATE users SET config = $1 WHERE id = $2", config, id)
 	return errors.Wrap(err, "update failed")
 }
@@ -205,6 +205,15 @@ func (s *storage) fixup(ctx context.Context) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func (s *storage) ResetCounts(ctx context.Context, userID, category int64) error {
+	q := "UPDATE items SET compared = 0 WHERE category = $1 AND user_id = $2"
+	if _, err := s.db.ExecContext(ctx, q, category, userID); err != nil {
+		return err
+	}
+
 	return nil
 }
 

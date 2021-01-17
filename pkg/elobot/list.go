@@ -474,6 +474,12 @@ func (su *singleUser) importList(ctx context.Context, username string) (string, 
 
 		result = append(result,
 			fmt.Sprintf(su.translate(itemsInYourList), count, su.translate(cat.Name), count-old))
+		if count == old {
+			continue
+		}
+		if err := su.storage.ResetCounts(ctx, su.userID, cat.ID); err != nil {
+			log.Println("Error: ", err)
+		}
 	}
 
 	return strings.Join(result, "\n"), nil
